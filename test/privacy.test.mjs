@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { DENY_HASHES } from "../install.mjs";
 import { sha256 } from "./fake.mjs";
 
+const HOME_DIR = "/" + "Users" + "/";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
   cwd: ROOT,
@@ -22,7 +23,7 @@ test("the repo lists at least one file to check", () => {
 for (const f of files) {
   test(`no denied name and no personal path in ${f}`, () => {
     const text = readFileSync(join(ROOT, f), "utf8");
-    assert.equal(text.includes("/Users/"), false, "contains /Users/");
+    assert.equal(text.includes(HOME_DIR), false, "contains a personal home path");
     const words = new Set([...(f + "\n" + text).split(/[^A-Za-z]+/)].map((w) => w.toLowerCase()).filter(Boolean));
     for (const w of words) {
       assert.equal(DENY_HASHES.includes(sha256(w)), false, `a word hashes to a denied name`);

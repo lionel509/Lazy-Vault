@@ -11,7 +11,7 @@ import {
 } from "../.testbuild/data.mjs";
 
 const TODAY = 1000;
-const BASE = "/Users/example/Vault";
+const BASE = "/home/example/Vault";
 
 test("DEFAULT_SETTINGS matches the plan", () => {
   assert.deepEqual(DEFAULT_SETTINGS, {
@@ -57,7 +57,7 @@ test("parseHistory: null gives a fresh history for this vault", () => {
 });
 
 test("parseHistory: a foreign vaultBase restarts with an error", () => {
-  const raw = { vaultBase: "/Users/example/Other", firstSeenDay: TODAY - 60, lastActive: { A: TODAY - 50 }, startups: [] };
+  const raw = { vaultBase: "/home/example/Other", firstSeenDay: TODAY - 60, lastActive: { A: TODAY - 50 }, startups: [] };
   const { history, errors } = parseHistory(raw, BASE, TODAY);
   assert.equal(history.vaultBase, BASE);
   assert.equal(history.firstSeenDay, TODAY);
