@@ -33,11 +33,11 @@ test("decide: a pinned descendant protects its ancestor from the cold rule", () 
 });
 
 test("decide: a dir with .git and .obsidian is not a repo", () => {
-  assert.equal(decide("V", { isDir: true, hasGit: true, hasObsidian: true }, CTX()), null);
+  assert.equal(decide("V", { isDir: true, hasGit: true, hasObsidian: true }, CTX({ settings: { ...DEFAULT_SETTINGS, coldDays: 0 } })), null);
 });
 
 test("decide: build names are matched case-sensitively on the basename", () => {
-  assert.equal(decide("Node_modules", DIR, CTX()), null);
+  assert.equal(decide("Node_modules", DIR, CTX({ settings: { ...DEFAULT_SETTINGS, coldDays: 0 } })), null);
   assert.equal(decide("node_modules", DIR, CTX()), "build");
   assert.equal(decide("a/dist", DIR, CTX()), "build");
 });
