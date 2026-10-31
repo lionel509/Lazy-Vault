@@ -1,0 +1,39 @@
+.lazy-vault .lv-section {
+  margin-bottom: 1em;
+}
+
+.lazy-vault .lv-status {
+  font-weight: 600;
+}
+
+.lazy-vault .lv-warn {
+  color: var(--text-warning);
+}
+
+.lazy-vault .lv-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.2em 0;
+}
+
+.lazy-vault .lv-row-text {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.lazy-vault .lv-table {
+  width: 100%;
+  font-size: var(--font-ui-small);
+}
+
+.lazy-vault .lv-table th,
+.lazy-vault .lv-table td {
+  text-align: left;
+  padding: 0.1em 0.4em;
+}
+
+.lazy-vault .lv-buttons {
+  display: flex;
+  gap: 0.5em;
+}
