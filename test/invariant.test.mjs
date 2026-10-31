@@ -123,7 +123,10 @@ for (let seed = 1; seed <= 40; seed++) {
         for (const f of disk) if (!f.includes("/")) assert.ok(loaded.has(f), `root file ${f} not loaded`);
 
         // I3: a link click on any on-disk note opens an existing note and creates nothing.
-        for (const md of disk.filter((f) => f.endsWith(".md"))) {
+        // Build folders are not indexed (walkNames skips them), so a click into one creates a note by design.
+        const buildNames = new Set(DEFAULT_SETTINGS.buildNames);
+        const clickable = (f) => f.endsWith(".md") && !f.split("/").some((seg) => buildNames.has(seg));
+        for (const md of disk.filter(clickable)) {
           const before = diskFiles(base);
           const count = fake.opened.length;
           const basename = md.split("/").pop().slice(0, -3);
