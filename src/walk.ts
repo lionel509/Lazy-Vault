@@ -6,13 +6,27 @@ import type { State } from "./hooks";
 
 // Iterative readdir. Reads names only, never contents. Skips dot-entries, symlinks and
 // directories named in skipNames. Returns sorted vault-relative file paths.
-export async function walkNames(base: string, root: string, skipNames: string[]): Promise<string[]> {
+// An unreadable folder below the root is reported through onError and left out; the rest of
+// the root is still listed. An unreadable root throws.
+export async function walkNames(
+  base: string,
+  root: string,
+  skipNames: string[],
+  onError?: (dir: string, err: unknown) => void,
+): Promise<string[]> {
   const skip = new Set(skipNames);
   const out: string[] = [];
   const stack: string[] = [root];
   while (stack.length) {
     const dir = stack.pop() as string;
-    const entries = await readdir(join(base, dir), { withFileTypes: true });
+    let entries;
+    try {
+      entries = await readdir(join(base, dir), { withFileTypes: true });
+    } catch (err) {
+      if (dir === root) throw err;
+      onError?.(dir, err);
+      continue;
+    }
     for (const e of entries) {
       if (e.name.startsWith(".") || e.isSymbolicLink()) continue;
       const rel = dir === "" ? e.name : dir + "/" + e.name;
@@ -40,7 +54,9 @@ export async function indexSkipped(s: State): Promise<void> {
     const root = missing;
     let files: string[] = [];
     try {
-      files = await walkNames(s.base, root, s.ctx.settings.buildNames);
+      files = await walkNames(s.base, root, s.ctx.settings.buildNames, (dir, err) => {
+        s.errors.push(`index ${dir}: ${String(err)}`);
+      });
     } catch (err) {
       s.errors.push(`index ${root}: ${String(err)}`);
     }
