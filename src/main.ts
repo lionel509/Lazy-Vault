@@ -144,8 +144,8 @@ export default class LazyVaultPlugin extends Plugin {
       this.mode = "late";
       s.problems.push("Enabled mid-session: skipping starts at next Obsidian start");
     } else {
+      // installHooks has already put its problems in s.problems; do not add them again.
       const r = installHooks(this.targets, s, this.deps);
-      s.problems.push(...r.problems);
       this.restoreHooks = r.restore;
       this.mode = r.problems.length ? "failopen" : "on";
     }
