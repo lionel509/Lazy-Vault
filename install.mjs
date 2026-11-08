@@ -1,7 +1,7 @@
 // Copies the built plugin (main.js, manifest.json, styles.css) into registered
 // Obsidian vaults. Writes nothing else: no community-plugins.json, no data.json.
-import { copyFileSync, existsSync, mkdirSync, realpathSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { copyFileSync, existsSync, lstatSync, mkdirSync, realpathSync } from "node:fs";
+import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -29,7 +29,7 @@ export function forbidden(path, hashes = DENY_HASHES) {
   }
   for (const c of candidates) {
     for (const seg of segments(c)) {
-      if (hashes.includes(sha(seg.toLowerCase()))) return true;
+      if (hashes.includes(sha(seg.normalize("NFC").toLowerCase()))) return true;
     }
   }
   return false;
@@ -44,11 +44,27 @@ export function targets(env, home) {
 }
 
 // Forbidden is checked first, always, whatever OBSIDIAN_VAULTS says.
+// A path that is itself a symbolic link. Missing paths are not links.
+const isLink = (p) => {
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+
+// Refuses any link in .obsidian, plugins or lazy-vault, and any destination whose real path is
+// outside the vault's real path or inside a denied folder. Nothing is written when refused.
 export function installInto(vault, srcDir, hashes = DENY_HASHES) {
   if (forbidden(vault, hashes)) return "forbidden";
-  if (!existsSync(join(vault, ".obsidian"))) return "no-obsidian";
-  const dest = join(vault, ".obsidian", "plugins", "lazy-vault");
+  const obs = join(vault, ".obsidian");
+  if (!existsSync(obs)) return "no-obsidian";
+  const dest = join(obs, "plugins", "lazy-vault");
+  if (isLink(obs) || isLink(join(obs, "plugins")) || isLink(dest)) return "unsafe";
   mkdirSync(dest, { recursive: true });
+  const realVault = realpathSync(vault);
+  const rel = relative(realVault, realpathSync(dest));
+  if (rel === "" || rel.startsWith("..") || isAbsolute(rel) || forbidden(realpathSync(dest), hashes)) return "unsafe";
   for (const f of FILES) copyFileSync(join(srcDir, f), join(dest, f));
   return "installed";
 }
@@ -61,10 +77,24 @@ function main() {
     return;
   }
   for (const vault of targets(process.env, homedir())) {
-    const result = installInto(vault, here);
-    console.log(`${result}\t${vault}`);
-    if (result === "forbidden") process.exitCode = 1;
+    // One broken vault must not stop the others.
+    try {
+      const result = installInto(vault, here);
+      console.log(`${result}\t${vault}`);
+      if (result === "forbidden" || result === "unsafe") process.exitCode = 1;
+    } catch (err) {
+      console.error(`error\t${vault}\t${String(err)}`);
+      process.exitCode = 1;
+    }
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+// realpath, so the check also holds when this file is run through a symlink.
+const invokedDirectly = (() => {
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+})();
+if (invokedDirectly) main();
