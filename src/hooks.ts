@@ -23,6 +23,16 @@ export interface Deps {
   notice(msg: string): void;
 }
 
+// Timing of the scan wrapper's probes, for the startup record. Times are performance.now() values.
+export interface ProbeStats {
+  first: number | null;
+  last: number | null;
+  count: number;
+  totalMs: number;
+  maxMs: number;
+  maxPath: string | null;
+}
+
 export interface State {
   base: string;
   ctx: Ctx;
@@ -33,6 +43,7 @@ export interface State {
   indexing: Promise<void>;
   // One in-flight load per root: a second caller waits for it instead of forking the note.
   loading: Map<string, Promise<void>>;
+  probe: ProbeStats;
   problems: string[];
   errors: string[];
   scanCalls: number;
@@ -96,6 +107,7 @@ export function newState(base: string, ctx: Ctx): State {
     index: new Map(),
     indexing: Promise.resolve(),
     loading: new Map(),
+    probe: { first: null, last: null, count: 0, totalMs: 0, maxMs: 0, maxPath: null },
     problems: [],
     errors: [],
     scanCalls: 0,
@@ -149,12 +161,17 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
       const [parent, name] = args;
       if (!s.active || typeof name !== "string" || name.startsWith(".")) return orig.apply(this, args);
       s.scanCalls++;
+      const now = performance.now();
+      if (s.probe.first === null) s.probe.first = now;
+      s.probe.last = now;
       const raw = typeof parent === "string" && parent !== "" ? parent + "/" + name : name;
       const p = norm(raw);
       let reason: Reason | null;
       try {
         if (s.loaded.has(p)) return orig.apply(this, args);
+        const t0 = performance.now();
         const probe = await probeOf(t.adapter.getFullRealPath(raw));
+        recordProbe(s, p, t0);
         // Unloaded while the probe was in flight: the originals are back, so nothing may hide this entry.
         if (!s.active) return orig.apply(this, args);
         reason = decide(p, probe, s.ctx);
@@ -307,6 +324,18 @@ async function noteDropped(t: Targets, s: State, p: string, root: string): Promi
   const at = files.indexOf(p);
   if (isFile && at < 0) files.push(p);
   if (!isFile && at >= 0) files.splice(at, 1);
+}
+
+// One probe finished: count it, and keep the slowest one with its path.
+function recordProbe(s: State, path: string, t0: number): void {
+  const dt = performance.now() - t0;
+  const st = s.probe;
+  st.count++;
+  st.totalMs += dt;
+  if (dt > st.maxMs) {
+    st.maxMs = dt;
+    st.maxPath = path;
+  }
 }
 
 // The load in flight for a path, if one of its ancestors-or-self is loading.

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pins: [],
   skipList: [],
   allowWithSync: false,
+  pausedAfterSlowStart: false,
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -56,6 +57,10 @@ export function parseSettings(raw: unknown): { settings: Settings; errors: strin
   if (raw.allowWithSync !== undefined) {
     if (typeof raw.allowWithSync === "boolean") settings.allowWithSync = raw.allowWithSync;
     else errors.push("settings.allowWithSync: not a boolean, using default");
+  }
+  if (raw.pausedAfterSlowStart !== undefined) {
+    if (typeof raw.pausedAfterSlowStart === "boolean") settings.pausedAfterSlowStart = raw.pausedAfterSlowStart;
+    else errors.push("settings.pausedAfterSlowStart: not a boolean, using default");
   }
   return { settings, errors };
 }

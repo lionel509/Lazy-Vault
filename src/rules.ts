@@ -10,6 +10,8 @@ export interface Settings {
   pins: string[];
   skipList: string[];
   allowWithSync: boolean;
+  // Set when the last start with skipping took over SLOW_START_MS. Cleared by resuming in the view.
+  pausedAfterSlowStart: boolean;
 }
 
 export interface Startup {
@@ -24,6 +26,15 @@ export interface Startup {
   skipped: { path: string; reason: Reason }[];
   skippedFiles: number | null;
   problems: string[];
+  // Scan timing, from the first and last scan-wrapper call and the probes. Null when no scan ran.
+  scanFirstMs?: number | null;
+  scanLastMs?: number | null;
+  probeCount?: number;
+  probeTotalMs?: number;
+  probeMaxMs?: number;
+  probeMaxPath?: string | null;
+  // The user has seen the slow-start warning and resumed. A later start then ignores this record.
+  acked?: boolean;
   selftest?: { link: string; source: string; opened: string | null };
 }
 

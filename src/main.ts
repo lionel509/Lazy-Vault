@@ -208,6 +208,12 @@ export default class LazyVaultPlugin extends Plugin {
       skipped: [...s.skipped].map(([path, reason]) => ({ path, reason })),
       skippedFiles: null,
       problems: [...s.problems],
+      scanFirstMs: s.probe.first,
+      scanLastMs: s.probe.last,
+      probeCount: s.probe.count,
+      probeTotalMs: s.probe.totalMs,
+      probeMaxMs: s.probe.maxMs,
+      probeMaxPath: s.probe.maxPath,
     };
     this.record = record;
     this.history.startups = [...this.history.startups, record].slice(-20);
