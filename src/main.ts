@@ -214,15 +214,18 @@ export default class LazyVaultPlugin extends Plugin {
     this.saveHistory();
     if (this.mode === "on") {
       s.indexing = indexSkipped(s)
-        .then(async () => {
+        .then(() => {
           record.skippedFiles = indexedFiles(s).length;
           this.saveHistory();
           this.emitChanged();
-          await this.selftest(record);
         })
         .catch((e: unknown) => {
           s.errors.push(`index failed: ${String(e)}`);
         });
+      // Outside the indexing chain: a link click awaits s.indexing, so the selftest must not be inside it.
+      void s.indexing.then(() => this.selftest(record)).catch((e: unknown) => {
+        s.errors.push(`selftest failed: ${String(e)}`);
+      });
     }
     this.emitChanged();
   }
