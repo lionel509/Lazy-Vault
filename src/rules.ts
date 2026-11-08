@@ -11,7 +11,7 @@ export interface Settings {
   skipList: string[];
   allowWithSync: boolean;
   // Set when the last start with skipping took over SLOW_START_MS. Cleared by resuming in the view.
-  pausedAfterSlowStart: boolean;
+  pausedAfterSlowStart?: boolean;
 }
 
 export interface Startup {

@@ -11,7 +11,6 @@ export const DEFAULT_SETTINGS: Settings = {
   pins: [],
   skipList: [],
   allowWithSync: false,
-  pausedAfterSlowStart: false,
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
