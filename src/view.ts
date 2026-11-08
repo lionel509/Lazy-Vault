@@ -75,6 +75,11 @@ export class LazyVaultView extends ItemView {
       const ul = status.createEl("ul");
       for (const msg of s.problems) ul.createEl("li", { text: msg });
     }
+    if (p.cfg.pausedAfterSlowStart) {
+      status
+        .createEl("button", { text: "Resume skipping (at next start)" })
+        .addEventListener("click", () => void p.resumeSkipping());
+    }
     if (p.syncIsOn && p.cfg.allowWithSync) {
       status.createEl("p", {
         text: "Obsidian Sync is on and 'Allow with Obsidian Sync' is set: a skipped folder may look deleted to Sync.",

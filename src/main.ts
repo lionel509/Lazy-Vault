@@ -25,6 +25,9 @@ import { LazyVaultView, SkippedFolderModal, SkippedNoteModal, VIEW_TYPE } from "
 const SYNC_GATE =
   "Obsidian Sync is on in this vault, so nothing is skipped. Turn on 'Allow with Obsidian Sync' in settings to skip anyway (a skipped folder may look deleted to Sync).";
 
+// A start with skipping that takes longer than this pauses skipping until the user resumes it.
+const SLOW_START_MS = 20000;
+
 const unique = (xs: string[]): string[] => [...new Set(xs)];
 
 function historyDir(): string {
@@ -109,6 +112,8 @@ export default class LazyVaultPlugin extends Plugin {
 
     this.cfg = settings;
     this.history = history;
+    // Persist the pause now, so it holds even if the history file is lost.
+    if (settings.pausedAfterSlowStart) void this.saveSettings();
     // A snapshot: the settings tab edits this.cfg, and that edit takes effect at the next start, not now.
     const ctx: Ctx = { settings: structuredClone(settings), history, today, startup: true, protect };
     const s = newState(base, ctx);
@@ -132,11 +137,21 @@ export default class LazyVaultPlugin extends Plugin {
       notice: (m: string) => new Notice(m),
     };
 
+    // The last start with skipping, if it was slow and the user has not resumed since, pauses skipping.
+    const lastOn = [...history.startups].reverse().find((r) => r.mode === "on");
+    const slowMs = lastOn && !lastOn.acked && typeof lastOn.layoutReadyMs === "number" ? lastOn.layoutReadyMs : null;
+    if (slowMs !== null && slowMs > SLOW_START_MS) settings.pausedAfterSlowStart = true;
+
     if (!desktop) {
       this.mode = "failopen";
       s.problems.push("Not a desktop vault: nothing skipped");
     } else if (!settings.enabled) {
       this.mode = "off";
+    } else if (settings.pausedAfterSlowStart) {
+      this.mode = "failopen";
+      const why =
+        slowMs !== null ? `Last start with skipping took ${Math.round(slowMs / 1000)} s` : "A previous start with skipping was slow";
+      s.problems.push(`${why}; skipping paused. Resume it in the Lazy Vault view (takes effect at next start).`);
     } else if (this.syncIsOn && !settings.allowWithSync) {
       this.mode = "failopen";
       s.problems.push(SYNC_GATE);
@@ -307,6 +322,17 @@ export default class LazyVaultPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.cfg);
+  }
+
+  // Clears the slow-start pause. The latest slow start is marked acknowledged, so the next start does not pause again.
+  // Takes effect at the next start, since the hooks are installed at onload.
+  async resumeSkipping(): Promise<void> {
+    this.cfg.pausedAfterSlowStart = false;
+    const lastOn = [...this.history.startups].reverse().find((r) => r.mode === "on");
+    if (lastOn) lastOn.acked = true;
+    this.saveHistory();
+    await this.saveSettings();
+    this.emitChanged();
   }
 
   async loadFolderNow(root: string): Promise<void> {
