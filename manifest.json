@@ -1,0 +1,9 @@
+{
+  "id": "lazy-vault",
+  "name": "Lazy Vault",
+  "version": "0.1.0",
+  "minAppVersion": "1.6.0",
+  "description": "Skips nested repos, build output and folders you haven't opened in a while; loads them when you ask.",
+  "author": "lionel509",
+  "isDesktopOnly": true
+}

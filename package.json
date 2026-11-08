@@ -1,0 +1,19 @@
+{
+  "name": "lazy-vault",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node esbuild.config.mjs && esbuild src/paths.ts src/rules.ts src/data.ts src/resolve.ts src/hooks.ts src/walk.ts --bundle --format=esm --outdir=.testbuild --out-extension:.js=.mjs --platform=node --log-level=warning && node --test test/*.test.mjs",
+    "install-local": "node esbuild.config.mjs && node install.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.0",
+    "obsidian": "^1.7.2",
+    "typescript": "^5.7.0"
+  }
+}
