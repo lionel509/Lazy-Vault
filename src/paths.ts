@@ -38,6 +38,19 @@ export function topSkipped(p: string, set: { has(k: string): boolean }): string 
   return null;
 }
 
+// Like topSkipped, but matches case-insensitively, as the default macOS filesystem does.
+// Returns the key as it is spelled in `keys`.
+export function topSkippedFold(p: string, keys: Iterable<string>): string | null {
+  const q = norm(p).toLowerCase();
+  let best: string | null = null;
+  for (const k of keys) {
+    const kl = norm(k).toLowerCase();
+    if (kl === "") continue;
+    if ((q === kl || q.startsWith(kl + "/")) && (best === null || k.length < best.length)) best = k;
+  }
+  return best;
+}
+
 // UTC epoch day.
 export function epochDay(ms: number): number {
   return Math.floor(ms / 86400000);

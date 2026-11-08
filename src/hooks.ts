@@ -3,7 +3,7 @@
 // Imports only node builtins and the pure modules, never `obsidian`.
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { norm, topSkipped } from "./paths";
+import { norm, topSkippedFold } from "./paths";
 import { decide } from "./rules";
 import type { Ctx, Probe, Reason } from "./rules";
 import { resolveSkipped } from "./resolve";
@@ -31,6 +31,8 @@ export interface State {
   loaded: Map<string, Reason>;
   index: Map<string, string[]>;
   indexing: Promise<void>;
+  // One in-flight load per root: a second caller waits for it instead of forking the note.
+  loading: Map<string, Promise<void>>;
   problems: string[];
   errors: string[];
   scanCalls: number;
@@ -93,6 +95,7 @@ export function newState(base: string, ctx: Ctx): State {
     loaded: new Map(),
     index: new Map(),
     indexing: Promise.resolve(),
+    loading: new Map(),
     problems: [],
     errors: [],
     scanCalls: 0,
@@ -134,7 +137,7 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
   const loadIfSkipped = async (path: unknown) => {
     if (typeof path !== "string") return;
     try {
-      if (topSkipped(norm(path), s.skipped) !== null) await loadFor(t, s, path);
+      if (topSkippedFold(norm(path), s.skipped.keys()) !== null) await loadFor(t, s, path);
     } catch (err) {
       s.errors.push(`load ${path}: ${String(err)}`);
     }
@@ -152,6 +155,8 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
       try {
         if (s.loaded.has(p)) return orig.apply(this, args);
         const probe = await probeOf(t.adapter.getFullRealPath(raw));
+        // Unloaded while the probe was in flight: the originals are back, so nothing may hide this entry.
+        if (!s.active) return orig.apply(this, args);
         reason = decide(p, probe, s.ctx);
       } catch (err) {
         s.errors.push(`scan ${p}: ${String(err)}`);
@@ -164,13 +169,17 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
       return undefined;
     };
 
-  // Watcher events: anything inside (or equal to) a skipped root is dropped.
+  // Watcher events: anything inside (or equal to) a skipped root is dropped, but the names index follows it.
   const event = (orig: Function) =>
     function (this: any, ...args: any[]): unknown {
       if (s.active) {
         const p = args[1];
         try {
-          if (typeof p === "string" && topSkipped(norm(p), s.skipped) !== null) return Promise.resolve();
+          if (typeof p === "string") {
+            const np = norm(p);
+            const root = topSkippedFold(np, s.skipped.keys());
+            if (root !== null) return noteDropped(t, s, np, root);
+          }
         } catch (err) {
           s.errors.push(`event ${String(p)}: ${String(err)}`);
         }
@@ -227,7 +236,7 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
         return orig.apply(this, args);
       }
       if (hit === null) return orig.apply(this, args);
-      const where = topSkipped(norm(hit), s.skipped) ?? hit;
+      const where = topSkippedFold(norm(hit), s.skipped.keys()) ?? hit;
       try {
         await loadFor(t, s, hit);
       } catch (err) {
@@ -269,37 +278,93 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
   return { problems, restore };
 }
 
-// Loads one skipped folder: it moves to `loaded`, then Obsidian's own new-folder path lists it.
-// Deliberately not run through adapter.queue, since a write guard can already be inside it.
-export async function loadFolder(t: Targets, s: State, root: string): Promise<void> {
-  const r = norm(root);
-  const reason = s.skipped.get(r);
-  if (reason === undefined) return;
-  s.skipped.delete(r);
-  s.loaded.set(r, reason);
-  s.index.delete(r);
-  s.changed();
-  await t.adapter.reconcileFile(t.adapter.getRealPath(r), r);
+// A file event inside a skipped root is dropped from the watcher, but the names-only index is
+// kept current, so a note added or removed mid-session still resolves on a link click.
+// Build-named and dot paths are left out, as at startup.
+async function noteDropped(t: Targets, s: State, p: string, root: string): Promise<void> {
+  const files = s.index.get(root);
+  if (files === undefined) return;
+  const below = p.split("/").slice(root.split("/").length);
+  if (below.some((seg) => seg.startsWith(".") || s.ctx.settings.buildNames.includes(seg))) return;
+  let isFile = false;
+  try {
+    isFile = (await lstat(t.adapter.getFullRealPath(p))).isFile();
+  } catch {
+    isFile = false;
+  }
+  const at = files.indexOf(p);
+  if (isFile && at < 0) files.push(p);
+  if (!isFile && at >= 0) files.splice(at, 1);
 }
 
-// Loads the top-most skipped ancestor-or-self of `path` until none is left.
+// The load in flight for a path, if one of its ancestors-or-self is loading.
+function pendingFor(s: State, path: string): Promise<void> | undefined {
+  const q = norm(path).toLowerCase();
+  for (const [root, job] of s.loading) {
+    const r = root.toLowerCase();
+    if (q === r || q.startsWith(r + "/")) return job;
+  }
+  return undefined;
+}
+
+// Loads one skipped folder: it moves to `loaded`, then Obsidian's own new-folder path lists it.
+// Deliberately not run through adapter.queue, since a write guard can already be inside it.
+// A second call for the same root gets the same promise. A failed load goes back to `skipped`.
+export function loadFolder(t: Targets, s: State, root: string): Promise<void> {
+  const r = norm(root);
+  const inFlight = s.loading.get(r);
+  if (inFlight !== undefined) return inFlight;
+  const reason = s.skipped.get(r);
+  if (reason === undefined) return Promise.resolve();
+  const job = (async () => {
+    // Yield first, so the entry below is registered before any of this runs.
+    await Promise.resolve();
+    s.skipped.delete(r);
+    s.loaded.set(r, reason);
+    s.changed();
+    try {
+      await t.adapter.reconcileFile(t.adapter.getRealPath(r), r);
+    } catch (err) {
+      s.loaded.delete(r);
+      s.skipped.set(r, reason);
+      s.changed();
+      throw err;
+    } finally {
+      s.loading.delete(r);
+    }
+    // The index goes last: until the folder is listed, a link click still finds the note and waits for this load.
+    s.index.delete(r);
+    s.changed();
+  })();
+  s.loading.set(r, job);
+  return job;
+}
+
+// Loads the top-most skipped ancestor-or-self of `path` until none is left, and waits for any load already in flight.
 export async function loadFor(t: Targets, s: State, path: string): Promise<void> {
   for (let i = 0; i < 64; i++) {
-    const root = topSkipped(norm(path), s.skipped);
-    if (root === null) return;
-    await loadFolder(t, s, root);
+    const root = topSkippedFold(norm(path), s.skipped.keys());
+    if (root !== null) {
+      await loadFolder(t, s, root);
+      continue;
+    }
+    const job = pendingFor(s, path);
+    if (job === undefined) return;
+    await job;
   }
 }
 
-// Loads every skipped folder for this session. Each load removes its root first, so this terminates.
+// Loads every skipped folder for this session. A root that fails to load is left skipped and not retried.
 export async function loadAll(t: Targets, s: State): Promise<void> {
+  const failed = new Set<string>();
   for (let i = 0; i < 100000; i++) {
-    const first = s.skipped.keys().next();
-    if (first.done) return;
+    const next = [...s.skipped.keys()].find((k) => !failed.has(k));
+    if (next === undefined) return;
     try {
-      await loadFolder(t, s, first.value);
+      await loadFolder(t, s, next);
     } catch (err) {
-      s.errors.push(`load ${first.value}: ${String(err)}`);
+      failed.add(next);
+      s.errors.push(`load ${next}: ${String(err)}`);
     }
   }
 }
