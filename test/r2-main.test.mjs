@@ -42,6 +42,7 @@ export class Menu {}
 export class Notice {}
 export class TAbstractFile {}
 export class TFile {}
+globalThis.__TFile = TFile;
 export class TFolder {}
 export class WorkspaceLeaf { async openLinkText(linktext, sourcePath, openState) {} }
 globalThis.__WorkspaceLeaf = WorkspaceLeaf;
@@ -96,7 +97,11 @@ function boot(f, { home, seed, layoutReady = false } = {}) {
       getFiles: () => [],
       getAllLoadedFiles: () => [],
       on: () => ({}),
-      getAbstractFileByPath: (p) => f.vault.getAbstractFileByPath(p),
+      // The plugin checks instanceof TFile, so a file comes back as a TFile, as in Obsidian.
+      getAbstractFileByPath: (p) => {
+        const e = f.vault.getAbstractFileByPath(p);
+        return e ? Object.assign(new globalThis.__TFile(), e) : null;
+      },
     },
     workspace: {
       layoutReady,
