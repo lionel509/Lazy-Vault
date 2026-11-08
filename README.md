@@ -26,6 +26,7 @@ The unit is always a folder, at any depth. The scan never descends into a skippe
 - **Load all** and per-folder **Load** buttons in the Lazy Vault view.
 - A write from another plugin into a skipped folder loads that folder first, so nothing fails or forks.
 - Renaming a note loads the cold and listed folders first, so link updates reach them. Repos stay skipped.
+- Known limit: a note under a build-named folder (`node_modules`, `dist`, `target` and so on) inside a skipped folder is not found by a link click. Use **Load** or **Pin** in the view for that folder.
 
 ## Install
 
