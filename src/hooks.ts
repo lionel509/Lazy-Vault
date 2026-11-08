@@ -268,7 +268,19 @@ export function installHooks(t: Targets, s: State, d: Deps): { problems: string[
     Object.defineProperty(wrapper, "length", { value: arity });
     installed.push({ obj, method, orig, wrapper });
   }
-  for (const w of installed) w.obj[w.method] = w.wrapper;
+  // An assignment can throw (a getter-only property). Undo the ones already made and fail open.
+  const assigned: typeof installed = [];
+  try {
+    for (const w of installed) {
+      w.obj[w.method] = w.wrapper;
+      assigned.push(w);
+    }
+  } catch (err) {
+    for (const w of assigned) w.obj[w.method] = w.orig;
+    const why = `hooks could not be installed: ${String(err)}`;
+    s.problems.push(why);
+    return { problems: [why], restore: () => {} };
+  }
   s.active = true;
 
   const restore = () => {

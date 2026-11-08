@@ -39,6 +39,8 @@ export class LazyVaultSettingTab extends PluginSettingTab {
       .setDesc("A folder not opened, edited or written to in this many days is skipped at next start. Takes effect at next start.")
       .addText((t) =>
         t.setValue(String(st.coldDays)).onChange(async (v) => {
+          // An empty field is not 0: Number("") is 0, which would switch cold skipping off.
+          if (v.trim() === "") return;
           const n = Number(v);
           if (Number.isInteger(n) && n >= 0 && n <= 3650) {
             st.coldDays = n;

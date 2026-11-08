@@ -57,7 +57,8 @@ export function isProtected(path: string, protect: string[]): boolean {
 export function isCold(path: string, h: History, today: number, coldDays: number): boolean {
   if (coldDays <= 0) return false;
   if (today - h.firstSeenDay < coldDays) return false;
-  const last = h.lastActive[path];
+  // Own keys only: "constructor" or "toString" must not read Object.prototype.
+  const last = Object.hasOwn(h.lastActive, path) ? h.lastActive[path] : undefined;
   return last === undefined || today - last >= coldDays;
 }
 

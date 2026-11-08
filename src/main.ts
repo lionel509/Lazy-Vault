@@ -109,7 +109,8 @@ export default class LazyVaultPlugin extends Plugin {
 
     this.cfg = settings;
     this.history = history;
-    const ctx: Ctx = { settings, history, today, startup: true, protect };
+    // A snapshot: the settings tab edits this.cfg, and that edit takes effect at the next start, not now.
+    const ctx: Ctx = { settings: structuredClone(settings), history, today, startup: true, protect };
     const s = newState(base, ctx);
     s.changed = () => this.emitChanged();
     s.errors.push(...errors);

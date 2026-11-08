@@ -86,7 +86,10 @@ export function parseHistory(
     if (isObj(raw.lastActive)) {
       for (const [k, v] of Object.entries(raw.lastActive)) {
         const key = norm(k);
-        if (key !== "") lastActive[key] = day(v, `lastActive.${k}`);
+        if (key === "") continue;
+        const d = day(v, `lastActive.${k}`);
+        // Two spellings of one folder ("Proj/" and "Proj"): the most recent activity wins.
+        lastActive[key] = Object.hasOwn(lastActive, key) ? Math.max(lastActive[key], d) : d;
       }
     } else {
       errors.push("history.lastActive: not an object, reset");
@@ -102,8 +105,12 @@ export function parseHistory(
 // only, so lastOpenFiles is ignored.
 export function openFilesFromWorkspace(raw: unknown): string[] {
   const out: string[] = [];
-  const walk = (node: unknown): void => {
-    if (!isObj(node)) return;
+  if (!isObj(raw)) return out;
+  // Iterative, so a deeply nested layout cannot overflow the stack. Same order as a recursive walk.
+  const stack: unknown[] = ["right", "left", "main"].map((k) => raw[k]);
+  while (stack.length) {
+    const node = stack.pop();
+    if (!isObj(node)) continue;
     if (node.type === "leaf" && isObj(node.state) && isObj(node.state.state)) {
       const file = node.state.state.file;
       if (typeof file === "string") {
@@ -111,10 +118,8 @@ export function openFilesFromWorkspace(raw: unknown): string[] {
         if (f !== "" && !out.includes(f)) out.push(f);
       }
     }
-    if (Array.isArray(node.children)) for (const c of node.children) walk(c);
-  };
-  if (!isObj(raw)) return out;
-  for (const k of ["main", "left", "right"]) walk(raw[k]);
+    if (Array.isArray(node.children)) for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i]);
+  }
   return out;
 }
 
