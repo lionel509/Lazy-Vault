@@ -79,6 +79,8 @@ export function makeFake(base) {
       try {
         await this.reconcileFileInternal(raw, nfc(raw));
       } catch (err) {
+        // An unreadable folder is listed as empty, as Obsidian does, and the rest of the scan goes on.
+        if (err.code === "EACCES") return;
         if (err.code !== "ENOENT") throw err;
         deleteTree(nfc(raw));
       }
